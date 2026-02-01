@@ -1,0 +1,721 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { YieldCalculator } from "@/components/YieldCalculator";
+import { BitcoinMetrics } from "@/components/BitcoinMetrics";
+import { FilterButton } from "@/components/FilterButton";
+import { BackgroundEffects } from "@/components/BackgroundEffects";
+import { TypeWriter } from "@/components/TypeWriter";
+import MarketTicker from "@/components/MarketTicker";
+
+const SwapCard = dynamic(() => import("@/components/SwapCard"), { ssr: false });
+
+const FILTER_HINTS = {
+  all: undefined,
+  lending: "Deposit BTC, earn interest. Lowest risk — no impermanent loss, your principal stays in BTC. ~3-5% APY.",
+  lp: "Provide liquidity to trading pairs. Higher yields (~8-15%) but you face impermanent loss if prices diverge.",
+  staking: "Lock BTC to secure protocols. Generally safe with no IL, but funds may be locked for a period. ~5% APY.",
+};
+
+const SEQUENCES = {
+  assets: [
+    { text: "Search BTC assets on Solana...", pauseAfter: 2500, backspaceTo: 0 },
+    { text: "Compare wrapped Bitcoin options...", pauseAfter: 2500, backspaceTo: 0 },
+    { text: "Find the best liquidity...", pauseAfter: 2500, backspaceTo: 0 },
+    { text: "Explore yield opportunities...", pauseAfter: 2500, backspaceTo: 0 },
+  ],
+  swap: [
+    { text: "BTC wrappers ↔ SOL & USDC. Best rates.", pauseAfter: 2500, backspaceTo: 0 },
+    { text: "Private Mode shields your output automatically.", pauseAfter: 2500, backspaceTo: 0 },
+    { text: "MEV protection on by default.", pauseAfter: 2500, backspaceTo: 0 },
+  ],
+  yield: [
+    { text: "Put your BTC to work. Earn while you hold.", pauseAfter: 2500, backspaceTo: 0 },
+    { text: "Curated protocols. Sorted by safety.", pauseAfter: 2500, backspaceTo: 0 },
+    { text: "Your stack grows even when price doesn't.", pauseAfter: 2500, backspaceTo: 0 },
+  ],
+};
+
+const BTC_ASSETS = [
+  {
+    symbol: "cbBTC",
+    name: "Coinbase Wrapped BTC",
+    custody: "Coinbase",
+    custodyType: "centralized" as const,
+    price: 94521,
+    change24h: 2.1,
+    volume24h: 46600000,
+    marketCap: 1200000000,
+    mint: "cbBTCnKqcg9sVhTbpQMfHotLVNGXfcDBkamzUG9jrs5b",
+  },
+  {
+    symbol: "WBTC",
+    name: "Wrapped Bitcoin",
+    custody: "BitGo",
+    custodyType: "centralized" as const,
+    price: 94498,
+    change24h: 2.0,
+    volume24h: 2100000,
+    marketCap: 890000000,
+    mint: "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
+  },
+  {
+    symbol: "zBTC",
+    name: "Zeus Network BTC",
+    custody: "Zeus Guardians",
+    custodyType: "decentralized" as const,
+    price: 94445,
+    change24h: 1.9,
+    volume24h: 1200000,
+    marketCap: 42000000,
+    mint: "ZBTCmoPZkDnPogPEPqkgPeBoXQpLhLH3WUmBPydmy1o",
+  },
+  {
+    symbol: "tBTC",
+    name: "Threshold BTC",
+    custody: "Threshold Network",
+    custodyType: "decentralized" as const,
+    price: 94389,
+    change24h: 1.8,
+    volume24h: 890000,
+    marketCap: 215000000,
+    mint: "6DNSN2BJsaPFdFFc1zP37kkeNe4Usc1Sqkzr9C9vPWcU",
+  },
+  {
+    symbol: "21BTC",
+    name: "21.co BTC",
+    custody: "21.co",
+    custodyType: "centralized" as const,
+    price: 94320,
+    change24h: 1.7,
+    volume24h: 450000,
+    marketCap: 18000000,
+    mint: "21BTCo9hWHjGYYUQQLqjLgDBxjcn8WLH3QMoatYqw7ki",
+  },
+];
+
+export default function Home() {
+  const [activeTab, setActiveTab] = useState<'assets' | 'swap' | 'yield'>('assets');
+  const [yieldFilter, setYieldFilter] = useState<'all' | 'lending' | 'lp' | 'staking'>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedToken, setSelectedToken] = useState<string | null>(null);
+  const [btcAssets, setBtcAssets] = useState(BTC_ASSETS);
+  const [pricesLoading, setPricesLoading] = useState(false);
+  const { publicKey, connected, disconnect } = useWallet();
+  const { setVisible } = useWalletModal();
+  const [mounted, setMounted] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+    fetchLivePrices();
+    const interval = setInterval(fetchLivePrices, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function fetchLivePrices() {
+    console.log("[Solis] Fetching live prices...");
+    
+    try {
+      setPricesLoading(true);
+      
+      const btcRes = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true'
+      );
+      
+      if (!btcRes.ok) {
+        throw new Error(`CoinGecko failed: ${btcRes.status}`);
+      }
+      
+      const btcData = await btcRes.json();
+      console.log("[Solis] BTC price:", btcData.bitcoin?.usd);
+      
+      const btcPrice = btcData.bitcoin?.usd || 94000;
+      const btcChange = btcData.bitcoin?.usd_24h_change || 0;
+      
+      const mints = BTC_ASSETS.map(a => a.mint).join(',');
+      const jupRes = await fetch(`https://api.jup.ag/price/v2?ids=${mints}`);
+      
+      if (!jupRes.ok) {
+        throw new Error(`Jupiter failed: ${jupRes.status}`);
+      }
+      
+      const jupData = await jupRes.json();
+      console.log("[Solis] Jupiter data:", Object.keys(jupData.data || {}));
+      
+      const updated = BTC_ASSETS.map(asset => {
+        const priceInfo = jupData.data?.[asset.mint];
+        const price = priceInfo?.price ? parseFloat(priceInfo.price) : null;
+        
+        return {
+          ...asset,
+          price: price || btcPrice * (0.998 + Math.random() * 0.004),
+          change24h: btcChange,
+        };
+      });
+      
+      console.log("[Solis] Prices updated:", updated.map(a => `${a.symbol}: $${a.price.toFixed(0)}`).join(', '));
+      setBtcAssets(updated);
+      
+    } catch (error) {
+      console.error('[Solis] Price fetch error:', error);
+    } finally {
+      setPricesLoading(false);
+    }
+  }
+
+  const currentSequences = useMemo(() => SEQUENCES[activeTab], [activeTab]);
+
+  const filteredAssets = btcAssets.filter(
+    (asset) =>
+      asset.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(price);
+
+  const formatVolume = (vol: number) => {
+    if (vol >= 1e9) return `$${(vol / 1e9).toFixed(1)}B`;
+    if (vol >= 1e6) return `$${(vol / 1e6).toFixed(1)}M`;
+    if (vol >= 1e3) return `$${(vol / 1e3).toFixed(0)}K`;
+    return `$${vol}`;
+  };
+
+  const handleTokenClick = (symbol: string) => {
+    router.push(`/asset/${symbol}`);
+  };
+
+  const handleSwapClick = (symbol: string) => {
+    setSelectedToken(symbol);
+    setActiveTab('swap');
+  };
+
+  const yieldOpportunities = [
+    { protocol: "Kamino", asset: "zBTC", type: "lending" as const, typeLabel: "Lending", apy: "4.2%", tvl: "$2.1M", auditor: "OtterSec", ilRisk: "None", link: "https://app.kamino.finance" },
+    { protocol: "Solend", asset: "zBTC", type: "lending" as const, typeLabel: "Lending", apy: "3.8%", tvl: "$1.8M", auditor: "Kudelski", ilRisk: "None", link: "https://solend.fi" },
+    { protocol: "Sanctum", asset: "zBTC", type: "staking" as const, typeLabel: "Staking", apy: "5.1%", tvl: "$850K", auditor: "OtterSec", ilRisk: "None", link: "https://sanctum.so" },
+    { protocol: "Meteora", asset: "zBTC/SOL", type: "lp" as const, typeLabel: "LP", apy: "12.8%", tvl: "$675K", auditor: "OtterSec", ilRisk: "Medium", link: "https://meteora.ag" },
+    { protocol: "Orca", asset: "zBTC/USDC", type: "lp" as const, typeLabel: "LP", apy: "8.4%", tvl: "$920K", auditor: "Kudelski", ilRisk: "Low", link: "https://orca.so" },
+  ];
+
+  const filteredYield = yieldFilter === 'all' ? yieldOpportunities : yieldOpportunities.filter(y => y.type === yieldFilter);
+
+  return (
+    <main className="min-h-screen bg-black text-white overflow-hidden">
+      <BackgroundEffects />
+      
+      {/* Market Ticker - Always at top */}
+      <div className="relative z-30">
+        <MarketTicker />
+      </div>
+      
+      <div className="fixed top-0 left-0 right-0 h-96 bg-gradient-to-b from-slate-900/50 to-transparent pointer-events-none z-10" />
+      <div className="fixed bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black to-transparent pointer-events-none z-10" />
+      
+      <header className="relative z-20 flex items-center justify-between px-8 py-5 border-b border-slate-800/50">
+        {activeTab === 'assets' ? (
+          <div className="w-24" /> 
+        ) : (
+          <div className="flex items-center gap-4">
+            <div className="relative group cursor-pointer" onClick={() => setActiveTab('assets')}>
+              <Image 
+                src="/solis-logo.png" 
+                alt="Solis" 
+                width={160} 
+                height={64} 
+                className="h-16 w-auto transition-all duration-300 group-hover:brightness-125" 
+              />
+              <div className="absolute inset-0 bg-white/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </div>
+            
+            {mounted && (
+              <div className="hidden md:block border-l border-slate-700 pl-4 min-w-[380px] h-6">
+                <TypeWriter 
+                  key={activeTab}
+                  sequences={currentSequences}
+                  typeDelay={30}
+                  backspaceDelay={15}
+                  className="text-slate-400 text-sm tracking-wide"
+                  loop={true}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Link 
+            href="/docs" 
+            className="px-4 py-2.5 text-sm text-slate-500 hover:text-white transition-colors tracking-wider uppercase"
+          >
+            Docs
+          </Link>
+
+          {connected ? (
+            <button 
+              onClick={() => disconnect()} 
+              className="px-5 py-2.5 bg-black border border-slate-700 hover:border-slate-400 hover:bg-slate-900 rounded text-sm text-slate-300 tracking-wider uppercase btn-press transition-all duration-200"
+            >
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                {publicKey?.toBase58().slice(0, 4)}...{publicKey?.toBase58().slice(-4)}
+              </span>
+            </button>
+          ) : (
+            <button 
+              onClick={() => setVisible(true)} 
+              className="group relative px-5 py-2.5 bg-white hover:bg-slate-100 text-black rounded text-sm font-bold tracking-wider uppercase btn-press transition-all duration-200"
+            >
+              <span className="relative z-10">Connect Wallet</span>
+              <div className="absolute inset-0 bg-white blur-md opacity-50 group-hover:opacity-75 transition-opacity duration-300 rounded" />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {activeTab === 'assets' && (
+        <div className="relative z-20">
+          <div className="flex flex-col items-center pt-16 pb-8">
+            <div className="relative group cursor-pointer mb-8">
+              <Image 
+                src="/solis-logo.png" 
+                alt="Solis" 
+                width={280} 
+                height={112} 
+                className="h-28 w-auto transition-all duration-300 group-hover:brightness-125" 
+              />
+              <div className="absolute inset-0 bg-white/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </div>
+            
+            <p className="text-slate-500 text-sm tracking-widest uppercase mb-8">Bitcoin DeFi on Solana</p>
+
+            <div className="relative w-full max-w-xl mx-auto px-6">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-black border border-slate-700 hover:border-slate-500 focus:border-slate-400 rounded-lg px-5 py-4 pl-12 text-sm tracking-wide focus:outline-none transition-colors"
+                  placeholder=""
+                />
+                <svg
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                {!searchQuery && mounted && (
+                  <div className="absolute left-12 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <TypeWriter 
+                      key="assets-search"
+                      sequences={SEQUENCES.assets}
+                      typeDelay={40}
+                      backspaceDelay={20}
+                      className="text-slate-500 text-sm tracking-wide"
+                      loop={true}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-center gap-2 mb-8">
+            {[
+              { key: 'assets', label: 'Assets' },
+              { key: 'swap', label: 'Swap' },
+              { key: 'yield', label: 'Yield' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                className={`relative px-5 py-2.5 rounded text-sm tracking-wider uppercase btn-press transition-all duration-200 ${
+                  activeTab === tab.key
+                    ? "bg-white text-black font-bold"
+                    : "bg-black text-slate-500 border border-slate-700 hover:border-slate-400 hover:text-slate-300"
+                }`}
+              >
+                {tab.label}
+                {activeTab === tab.key && (
+                  <div className="absolute inset-0 bg-white blur-md opacity-30 rounded" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="max-w-4xl mx-auto px-6 pb-8">
+            <div className="border border-slate-800 rounded-lg overflow-hidden">
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_100px] gap-4 px-6 py-3 bg-slate-900/50 border-b border-slate-800 text-xs text-slate-500 tracking-widest uppercase">
+                <div>Asset</div>
+                <div className="text-right">Price</div>
+                <div className="text-right">24H</div>
+                <div className="text-right">Volume</div>
+                <div className="text-right">Market Cap</div>
+                <div></div>
+              </div>
+
+              {filteredAssets.map((asset, index) => (
+                <div
+                  key={asset.symbol}
+                  className={`grid grid-cols-[2fr_1fr_1fr_1fr_1fr_100px] gap-4 px-6 py-4 items-center hover:bg-slate-900/50 transition-colors cursor-pointer ${
+                    index !== filteredAssets.length - 1 ? "border-b border-slate-800/50" : ""
+                  }`}
+                  onClick={() => handleTokenClick(asset.symbol)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-sm font-bold border border-slate-600">
+                      ₿
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold tracking-wide">{asset.symbol}</span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded tracking-wider uppercase ${
+                            asset.custodyType === "decentralized"
+                              ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                              : "bg-slate-800 text-slate-400 border border-slate-700"
+                          }`}
+                        >
+                          {asset.custodyType === "decentralized" ? "Decentralized" : "Centralized"}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500">{asset.custody}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right font-bold tracking-wide">{formatPrice(asset.price)}</div>
+
+                  <div
+                    className={`text-right font-bold tracking-wide ${
+                      asset.change24h >= 0 ? "text-green-400" : "text-red-400"
+                    }`}
+                  >
+                    {asset.change24h >= 0 ? "+" : ""}
+                    {asset.change24h.toFixed(1)}%
+                  </div>
+
+                  <div className="text-right text-slate-400 tracking-wide">
+                    {formatVolume(asset.volume24h)}
+                  </div>
+
+                  <div className="text-right text-slate-400 tracking-wide">
+                    {formatVolume(asset.marketCap)}
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSwapClick(asset.symbol);
+                      }}
+                      className="px-4 py-1.5 text-xs font-bold tracking-wider uppercase bg-white text-black rounded hover:bg-slate-200 transition-colors btn-press"
+                    >
+                      Swap
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 p-6 border border-slate-800 rounded-lg bg-slate-900/30">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0 mt-0.5 border border-slate-700">
+                  <svg className="w-4 h-4 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold tracking-wide mb-1">Why hold BTC on Solana?</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">
+                    Bitcoin in cold storage earns 0%. Wrapped BTC on Solana can earn 3-5% APY through
+                    lending protocols — that&apos;s yield denominated in BTC, not dollars. Your stack grows
+                    even when price doesn&apos;t.{" "}
+                    <button
+                      onClick={() => setActiveTab('yield')}
+                      className="text-white hover:text-slate-300 underline decoration-slate-600 hover:decoration-slate-400 transition-colors"
+                    >
+                      Explore yield opportunities →
+                    </button>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'swap' && (
+        <div className="relative z-20 max-w-6xl mx-auto px-8 py-12">
+          <div className="flex gap-2 mb-6">
+            {[
+              { key: 'assets', label: 'Assets' },
+              { key: 'swap', label: 'Swap' },
+              { key: 'yield', label: 'Yield' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                className={`relative px-5 py-2.5 rounded text-sm tracking-wider uppercase btn-press transition-all duration-200 ${
+                  activeTab === tab.key
+                    ? "bg-white text-black font-bold"
+                    : "bg-black text-slate-500 border border-slate-700 hover:border-slate-400 hover:text-slate-300"
+                }`}
+              >
+                {tab.label}
+                {activeTab === tab.key && (
+                  <div className="absolute inset-0 bg-white blur-md opacity-30 rounded" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-16 items-start transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            
+            <div>
+              <p className="text-slate-600 text-xs mb-6 tracking-widest uppercase">
+                BTC wrappers · SOL · USDC
+              </p>
+              <SwapCard initialFromToken={selectedToken} />
+              <BitcoinMetrics />
+            </div>
+
+            <div className="lg:pt-14">
+              <div className="mb-6">
+                <p className="text-slate-500 text-xs tracking-widest uppercase mb-2">Bitcoin DeFi on Solana</p>
+                <h1 className="text-2xl font-bold tracking-wide text-white">The BTC Swap</h1>
+              </div>
+
+              <div className="divider-gradient mb-6" />
+
+              <div className="space-y-5 stagger-in">
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Convert between Bitcoin wrappers and swap to SOL or USDC. 
+                  Optimized routing finds the best rates across all liquidity sources.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 border border-slate-800 rounded card-gradient hover:border-slate-700 transition-colors">
+                    <div className="text-slate-500 text-xs tracking-widest uppercase mb-1">Routing</div>
+                    <div className="text-white font-bold">Jupiter</div>
+                    <div className="text-slate-600 text-xs mt-1">Best price aggregation</div>
+                  </div>
+                  <div className="p-4 border border-slate-800 rounded card-gradient hover:border-slate-700 transition-colors">
+                    <div className="text-slate-500 text-xs tracking-widest uppercase mb-1">Privacy</div>
+                    <div className="text-white font-bold">Coming Soon</div>
+                    <div className="text-slate-600 text-xs mt-1">ZK shielded swaps</div>
+                  </div>
+                </div>
+
+                <div className="p-4 border border-slate-800 rounded card-gradient">
+                  <div className="text-slate-400 text-xs tracking-widest uppercase mb-2">Fee Structure</div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Standard Swap</span>
+                      <span className="text-white">0.5%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border border-slate-800 rounded bg-slate-900/30 card-gradient">
+                  <div className="text-slate-400 text-xs tracking-widest uppercase mb-2 flex items-center gap-2">
+                    MEV Protection
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  </div>
+                  <div className="text-white text-sm mb-1">On by default</div>
+                  <div className="text-slate-500 text-xs">Prevents sandwich attacks on large BTC trades.</div>
+                </div>
+
+                <Link href="/docs#fees" className="text-slate-500 hover:text-white text-xs tracking-wider uppercase transition-colors inline-flex items-center gap-1 group">
+                  View fee breakdown <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'yield' && (
+        <div className="relative z-20 max-w-6xl mx-auto px-8 py-12">
+          <div className="flex gap-2 mb-6">
+            {[
+              { key: 'assets', label: 'Assets' },
+              { key: 'swap', label: 'Swap' },
+              { key: 'yield', label: 'Yield' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                className={`relative px-5 py-2.5 rounded text-sm tracking-wider uppercase btn-press transition-all duration-200 ${
+                  activeTab === tab.key
+                    ? "bg-white text-black font-bold"
+                    : "bg-black text-slate-500 border border-slate-700 hover:border-slate-400 hover:text-slate-300"
+                }`}
+              >
+                {tab.label}
+                {activeTab === tab.key && (
+                  <div className="absolute inset-0 bg-white blur-md opacity-30 rounded" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-16 items-start transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            
+            <div>
+              <p className="text-slate-600 text-xs mb-6 tracking-widest uppercase">
+                Curated opportunities · Sorted by safety
+              </p>
+
+              <div className="flex gap-2 mb-4">
+                <FilterButton 
+                  label="All" 
+                  active={yieldFilter === 'all'} 
+                  onClick={() => setYieldFilter('all')}
+                />
+                <FilterButton 
+                  label="Lending" 
+                  active={yieldFilter === 'lending'} 
+                  onClick={() => setYieldFilter('lending')}
+                  hint={FILTER_HINTS.lending}
+                />
+                <FilterButton 
+                  label="LP" 
+                  active={yieldFilter === 'lp'} 
+                  onClick={() => setYieldFilter('lp')}
+                  hint={FILTER_HINTS.lp}
+                />
+                <FilterButton 
+                  label="Staking" 
+                  active={yieldFilter === 'staking'} 
+                  onClick={() => setYieldFilter('staking')}
+                  hint={FILTER_HINTS.staking}
+                />
+              </div>
+
+              <div className="border border-slate-800 rounded overflow-hidden bg-black/50">
+                <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-900/50 border-b border-slate-800 text-xs text-slate-500 tracking-widest uppercase">
+                  <div className="col-span-4">Protocol</div>
+                  <div className="col-span-2 text-right">APY</div>
+                  <div className="col-span-2 text-right">TVL</div>
+                  <div className="col-span-2 text-right">IL Risk</div>
+                  <div className="col-span-2 text-right">Audit</div>
+                </div>
+                
+                {filteredYield.map((opp, i) => (
+                  <a 
+                    key={i} 
+                    href={opp.link} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="grid grid-cols-12 gap-2 px-4 py-4 border-b border-slate-800/50 last:border-b-0 hover:bg-slate-800/30 transition-all duration-200 items-center group"
+                  >
+                    <div className="col-span-4">
+                      <div className="text-white font-bold text-sm group-hover:text-slate-100 transition-colors">{opp.protocol}</div>
+                      <div className="text-slate-600 text-xs">{opp.asset}</div>
+                    </div>
+                    <div className="col-span-2 text-right">
+                      <span className="text-white font-bold group-hover:text-green-400 transition-colors">{opp.apy}</span>
+                    </div>
+                    <div className="col-span-2 text-right text-slate-400 text-sm">{opp.tvl}</div>
+                    <div className="col-span-2 text-right">
+                      <span className={`text-xs px-2 py-0.5 rounded transition-all ${
+                        opp.ilRisk === 'None' ? 'text-green-400 bg-green-400/10 group-hover:bg-green-400/20' :
+                        opp.ilRisk === 'Low' ? 'text-slate-400 bg-slate-400/10 group-hover:bg-slate-400/20' :
+                        'text-yellow-400 bg-yellow-400/10 group-hover:bg-yellow-400/20'
+                      }`}>
+                        {opp.ilRisk}
+                      </span>
+                    </div>
+                    <div className="col-span-2 text-right text-slate-500 text-xs flex items-center justify-end gap-1">
+                      {opp.auditor}
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">↗</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+
+              <div className="mt-4 flex items-center gap-4 text-xs text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-400/50" />
+                  No IL Risk
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400/50" />
+                  IL Exposure
+                </span>
+              </div>
+
+              <div className="mt-6 p-4 border border-dashed border-slate-700 rounded text-center hover:border-slate-600 transition-colors">
+                <p className="text-slate-500 text-sm mb-3">Need BTC on Solana?</p>
+                <button 
+                  onClick={() => setActiveTab("swap")} 
+                  className="group relative px-4 py-2 bg-white text-black rounded text-sm font-bold tracking-wider uppercase hover:bg-slate-100 transition-all btn-press"
+                >
+                  <span className="relative z-10">Swap Now →</span>
+                  <div className="absolute inset-0 bg-white blur-sm opacity-50 group-hover:opacity-75 transition-opacity rounded" />
+                </button>
+              </div>
+            </div>
+
+            <div className="lg:pt-14">
+              <div className="mb-6">
+                <p className="text-slate-500 text-xs tracking-widest uppercase mb-2">Bitcoin DeFi on Solana</p>
+                <h1 className="text-2xl font-bold tracking-wide text-white">Earn Yield on Your BTC</h1>
+              </div>
+
+              <div className="divider-gradient mb-6" />
+
+              <div className="space-y-5 stagger-in">
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Most BTC sits idle earning <span className="text-white">0%</span>. Even conservative 
+                  yields compound significantly over time.
+                </p>
+
+                <YieldCalculator />
+
+                <Link href="/docs#yield" className="text-slate-500 hover:text-white text-xs tracking-wider uppercase transition-colors inline-flex items-center gap-1 group">
+                  Understand yield strategies <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                </Link>
+                
+                <p className="text-slate-700 text-xs">We earn referral fees from protocols. Your rates stay the same.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="relative z-20 border-t border-slate-800/50 px-8 py-6">
+        <div className="max-w-6xl mx-auto flex justify-between items-center text-xs text-slate-700">
+          <span className="tracking-wider uppercase">Powered by Jupiter</span>
+          <div className="flex gap-6">
+            <Link href="/docs" className="hover:text-slate-400 transition-colors tracking-wider uppercase">Docs</Link>
+            <a href="https://solscan.io" target="_blank" rel="noopener noreferrer" className="hover:text-slate-400 transition-colors tracking-wider uppercase">Solscan</a>
+          </div>
+        </div>
+      </footer>
+    </main>
+  );
+}
