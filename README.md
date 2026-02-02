@@ -24,8 +24,8 @@ Solis gives you one place to discover, compare, swap, and privately trade tokeni
 
 ## Demo
 
-📹 **[Demo Video (3 min)]** — *link coming*
-
+📹 **
+https://youtu.be/LbwS2gMyBls?si=aGc47M-ltEKkRrfv
 ---
 
 ## Bounties Targeted
