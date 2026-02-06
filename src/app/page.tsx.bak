@@ -342,22 +342,22 @@ export default function HomePage() {
           <div className="border-b border-slate-900 overflow-hidden bg-black">
             <div className="flex animate-scroll">
               {tickerData.map((item, index) => (
-                  <div key={`${item.symbol}-${index}`} className="flex items-center gap-3 md:gap-4 px-4 md:px-6 py-2.5 md:py-3 whitespace-nowrap border-r border-slate-900">
+                  <div key={`${item.symbol}-${index}`} className="flex items-center gap-4 px-6 py-3 whitespace-nowrap border-r border-slate-900">
                     <div className="flex flex-col">
                       <span className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
                         {item.symbol}
                       </span>
-                      <span className="text-xs md:text-sm font-bold text-white mb-0.5">
+                      <span className="text-sm font-bold text-white mb-0.5">
                         {item.price}
                       </span>
                       {item.change && (
-                        <span className={`text-[10px] md:text-xs font-medium ${item.positive ? 'text-green-400' : 'text-red-400'}`}>
+                        <span className={`text-xs font-medium ${item.positive ? 'text-green-400' : 'text-red-400'}`}>
                           {item.change}
                         </span>
                       )}
                     </div>
                     {sparklines[item.symbol] && (
-                      <div className="hidden sm:block">
+                      <div>
                         <Sparkline data={sparklines[item.symbol]} positive={item.positive} />
                       </div>
                     )}
@@ -367,20 +367,20 @@ export default function HomePage() {
           </div>
 
           {/* Simple Metric Cards */}
-          <div className="max-w-7xl mx-auto px-4 py-3 lg:px-6 lg:py-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
+          <div className="max-w-7xl mx-auto px-6 py-5">
+            <div className="grid grid-cols-4 gap-6">
               
               {/* Fear & Greed */}
-              <div className="bg-slate-950/50 border border-slate-900 rounded px-3 py-3 lg:px-5 lg:py-4">
+              <div className="bg-slate-950/50 border border-slate-900 rounded px-5 py-4">
                   <div className="text-[9px] text-slate-600 uppercase tracking-[0.15em] mb-2">
                     Fear & Greed Index
                   </div>
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xl lg:text-3xl font-bold text-white">
+                    <span className="text-3xl font-bold text-white">
                       {macroData ? macroData.fearGreed : '72'}
                     </span>
                     {macroData && (
-                      <span className={`text-xs lg:text-sm font-medium ${
+                      <span className={`text-sm font-medium ${
                         macroData.fearGreed > 55 ? 'text-green-400' : 
                         macroData.fearGreed < 45 ? 'text-red-400' : 
                         'text-slate-400'
@@ -391,36 +391,36 @@ export default function HomePage() {
                          macroData.fearGreed > 25 ? 'Fear' : 'Extreme Fear'}
                       </span>
                     )}
-                    {!macroData && <span className="text-xs lg:text-sm text-green-400 font-medium">Greed</span>}
+                    {!macroData && <span className="text-sm text-green-400 font-medium">Greed</span>}
                   </div>
                 </div>
 
               {/* BTC Dominance */}
-              <div className="bg-slate-950/50 border border-slate-900 rounded px-3 py-3 lg:px-5 lg:py-4">
+              <div className="bg-slate-950/50 border border-slate-900 rounded px-5 py-4">
                   <div className="text-[9px] text-slate-600 uppercase tracking-[0.15em] mb-2">
                     Bitcoin Dominance
                   </div>
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xl lg:text-3xl font-bold text-white">
+                    <span className="text-3xl font-bold text-white">
                       {macroData ? `${macroData.btcDom.toFixed(1)}%` : '54.2%'}
                     </span>
                   </div>
                 </div>
 
               {/* Stablecoin Dominance */}
-              <div className="bg-slate-950/50 border border-slate-900 rounded px-3 py-3 lg:px-5 lg:py-4">
+              <div className="bg-slate-950/50 border border-slate-900 rounded px-5 py-4">
                   <div className="text-[9px] text-slate-600 uppercase tracking-[0.15em] mb-2">
                     Stablecoin Dominance
                   </div>
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xl lg:text-3xl font-bold text-white">
+                    <span className="text-3xl font-bold text-white">
                       {macroData ? `${macroData.stableDom.toFixed(1)}%` : '8.1%'}
                     </span>
                   </div>
                 </div>
 
-              {/* Live Indicator - hidden on mobile */}
-              <div className="hidden lg:flex items-center justify-end">
+              {/* Live Indicator */}
+              <div className="flex items-center justify-end">
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
                   <span className="text-[9px] text-slate-600 uppercase tracking-[0.2em]">LIVE PRICES</span>
@@ -452,40 +452,40 @@ export default function HomePage() {
       `}</style>
 
       {/* Hero */}
-      <div className="max-w-6xl mx-auto px-4 py-10 md:px-6 lg:py-20">
+      <div className="max-w-6xl mx-auto px-6 py-20">
         <div className="text-center mb-6">
-          <h1 className="text-3xl md:text-5xl font-bold mb-3 tracking-tight">Solis</h1>
+          <h1 className="text-5xl font-bold mb-3 tracking-tight">Solis</h1>
         </div>
 
         <div className="text-center mb-3">
-          <h2 className="text-xs md:text-sm text-slate-500 uppercase tracking-[0.3em] font-bold">
+          <h2 className="text-sm text-slate-500 uppercase tracking-[0.3em] font-bold">
             24/7 Capital Markets
           </h2>
         </div>
 
-        <div className="text-center mb-10 md:mb-16 h-7">
-          <p className="text-sm md:text-base text-slate-400 tracking-wide">
+        <div className="text-center mb-16 h-7">
+          <p className="text-base text-slate-400 tracking-wide">
             {typewriterText}
             <span className="inline-block w-[2px] h-5 bg-white ml-1 animate-pulse align-middle" />
           </p>
         </div>
 
         {/* Search */}
-        <div className="max-w-2xl mx-auto mb-8 md:mb-12">
+        <div className="max-w-2xl mx-auto mb-12">
           <input
             type="text"
             placeholder="Search crypto, stocks, commodities..."
-            className="w-full bg-black border border-slate-800 rounded px-4 md:px-5 py-3 md:py-3.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-slate-700 transition-colors"
+            className="w-full bg-black border border-slate-800 rounded px-5 py-3.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-slate-700 transition-colors"
           />
         </div>
 
-        {/* Category Tabs - horizontally scrollable on mobile */}
-        <div className="flex gap-2 md:gap-3 mb-8 md:mb-10 overflow-x-auto pb-2 scrollbar-hide md:justify-center">
+        {/* Category Tabs */}
+        <div className="flex justify-center gap-3 mb-10">
           {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => handleCategoryClick(cat.id, cat.available)}
-              className={`shrink-0 px-4 md:px-5 py-2 md:py-2.5 text-[10px] md:text-xs font-bold tracking-[0.15em] md:tracking-[0.2em] uppercase transition-all ${
+              className={`px-5 py-2.5 text-xs font-bold tracking-[0.2em] uppercase transition-all ${
                 activeCategory === cat.id && cat.available
                   ? 'bg-white text-black'
                   : cat.available
@@ -494,21 +494,19 @@ export default function HomePage() {
               }`}
             >
               {cat.label}
-              {!cat.available && <span className="hidden sm:inline"> (SOON)</span>}
-              {!cat.available && <span className="sm:hidden">*</span>}
+              {!cat.available && ' (SOON)'}
             </button>
           ))}
         </div>
 
         {/* Asset Table */}
         <div className="border border-slate-800 rounded overflow-hidden">
-          {/* Table Header */}
-          <div className="grid grid-cols-[2fr_1fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 px-4 md:px-5 py-3 bg-slate-950 border-b border-slate-800">
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 bg-slate-950 border-b border-slate-800">
             <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Asset</div>
             <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Price</div>
             <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">24H</div>
-            <div className="hidden md:block text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Volume</div>
-            <div className="hidden md:block text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Market Cap</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Volume</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Market Cap</div>
             <div></div>
           </div>
 
@@ -521,60 +519,54 @@ export default function HomePage() {
               <div
                 key={asset.symbol}
                 onClick={() => window.location.href = `/asset/${asset.symbol.toLowerCase()}`}
-                className="grid grid-cols-[2fr_1fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-900 hover:bg-slate-950 transition-colors items-center group cursor-pointer"
+                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-4 border-b border-slate-900 hover:bg-slate-950 transition-colors items-center group cursor-pointer"
               >
-                {/* Asset name + icon */}
-                <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                <div className="flex items-center gap-3">
                   {asset.logoURI ? (
                     <Image 
                       src={asset.logoURI} 
                       alt={asset.symbol} 
                       width={36} 
                       height={36} 
-                      className="rounded-full w-7 h-7 md:w-9 md:h-9 shrink-0"
+                      className="rounded-full"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
                       }}
                     />
                   ) : null}
                   {!asset.logoURI && (
-                    <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-slate-900 flex items-center justify-center text-[10px] md:text-xs font-bold group-hover:bg-slate-800 transition-colors shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold group-hover:bg-slate-800 transition-colors">
                       {asset.symbol[0]}
                     </div>
                   )}
-                  <div className="min-w-0">
-                    <div className="font-bold text-xs md:text-sm text-white">{asset.symbol}</div>
-                    <div className="text-[10px] md:text-xs text-slate-600 truncate">{asset.name}</div>
+                  <div>
+                    <div className="font-bold text-sm text-white">{asset.symbol}</div>
+                    <div className="text-xs text-slate-600">{asset.name}</div>
                   </div>
                 </div>
 
-                {/* Price */}
-                <div className="text-right text-xs md:text-sm text-white font-medium">
+                <div className="text-right text-sm text-white font-medium">
                   {asset.price > 0 ? fmtPrice(asset.price) : '--'}
                 </div>
 
-                {/* 24H Change */}
-                <div className={`text-right text-xs md:text-sm font-medium ${
+                <div className={`text-right text-sm font-medium ${
                   asset.change >= 0 ? 'text-green-400' : 'text-red-400'
                 }`}>
                   {asset.change !== 0 ? `${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(1)}%` : '--'}
                 </div>
 
-                {/* Volume - hidden on mobile */}
-                <div className="hidden md:block text-right text-sm text-slate-500">
+                <div className="text-right text-sm text-slate-500">
                   {asset.volume > 0 ? fmtVolume(asset.volume) : '--'}
                 </div>
 
-                {/* Market Cap - hidden on mobile */}
-                <div className="hidden md:block text-right text-sm text-slate-500">
+                <div className="text-right text-sm text-slate-500">
                   {asset.mcap > 0 ? fmtMarketCap(asset.mcap) : '--'}
                 </div>
 
-                {/* Swap button */}
                 <Link 
                   href={`/swap?from=${asset.symbol}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="px-3 md:px-4 py-1.5 bg-white text-black text-[9px] md:text-[10px] font-bold tracking-[0.15em] uppercase hover:bg-slate-200 transition-colors"
+                  className="px-4 py-1.5 bg-white text-black text-[10px] font-bold tracking-[0.15em] uppercase hover:bg-slate-200 transition-colors"
                 >
                   SWAP
                 </Link>
@@ -590,9 +582,9 @@ export default function HomePage() {
 
       {/* Waitlist Modal */}
       {showWaitlist && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur flex items-center justify-center z-50 p-4">
-          <div className="bg-black border border-slate-800 rounded p-6 md:p-8 max-w-md w-full">
-            <h3 className="text-lg md:text-xl font-bold mb-3 uppercase tracking-wider">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur flex items-center justify-center z-50">
+          <div className="bg-black border border-slate-800 rounded p-8 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold mb-3 uppercase tracking-wider">
               {waitlistCategory} Coming Soon
             </h3>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">

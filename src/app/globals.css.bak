@@ -38,15 +38,6 @@ body {
   font-family: 'Space Mono', monospace;
 }
 
-/* Hide scrollbar for horizontal scroll areas (tabs, categories) */
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
