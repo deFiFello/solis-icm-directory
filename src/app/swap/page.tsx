@@ -318,7 +318,7 @@ function SwapPageContent() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <Header activePage="swap" />
+      <Header />
 
       <main className="max-w-6xl mx-auto px-4 py-6 md:px-6 md:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">

@@ -63,7 +63,7 @@ export default function DocsPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <Header activePage="docs" />
+      <Header />
 
       <div className="flex max-w-7xl mx-auto">
         {/* Sidebar */}
