@@ -1,631 +1,505 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { getPythMarketData } from '@/services/pythPrices';
-import { getAllMarketData } from '@/services/macroData';
-import { getVerifiedPrice } from '@/services/jupiterPrice';
-import { getMarketData as getDexData } from '@/services/dexScreener';
-import { getTokenMetadata } from '@/services/heliusMetadata';
-import { SOLIS_ASSETS } from '@/services/config';
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import Header from "@/components/Header";
+import {
+  getMarketData,
+  getTokenMetadata,
+  SOLIS_ASSETS,
+  COMMON_MINTS,
+} from "@/services";
 
-// Simple sparkline component
-function Sparkline({ data, positive }: { data: number[], positive: boolean }) {
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  
-  const points = data.map((value, index) => {
-    const x = (index / (data.length - 1)) * 100;
-    const y = range > 0 ? 100 - ((value - min) / range) * 100 : 50;
-    return `${x},${y}`;
-  }).join(' ');
-  
+// Waitlist Google Form URL
+const WAITLIST_URL = "https://forms.gle/2LRiaZbVEc7zpmsC9";
+
+// Typewriter messages acknowledging API partners
+const TYPEWRITER_MESSAGES = [
+  "Liquidity provided by Jupiter",
+  "Metadata powered by Helius",
+  "Shielded Swaps via PrivacyCash",
+  "Trade stocks, crypto, gold - all on-chain.",
+  "No brokers. No banks. No market hours.",
+  "Your keys, your assets. Always.",
+];
+
+function TypeWriter({ messages }: { messages: string[] }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [displayText, setDisplayText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentMessage = messages[currentIndex];
+    const timeout = isDeleting ? 30 : 80;
+
+    if (!isDeleting && displayText === currentMessage) {
+      // Pause at end of message
+      const pauseTimeout = setTimeout(() => setIsDeleting(true), 2000);
+      return () => clearTimeout(pauseTimeout);
+    }
+
+    if (isDeleting && displayText === "") {
+      setIsDeleting(false);
+      setCurrentIndex((prev) => (prev + 1) % messages.length);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (isDeleting) {
+        setDisplayText(currentMessage.slice(0, displayText.length - 1));
+      } else {
+        setDisplayText(currentMessage.slice(0, displayText.length + 1));
+      }
+    }, timeout);
+
+    return () => clearTimeout(timer);
+  }, [displayText, isDeleting, currentIndex, messages]);
+
   return (
-    <svg width="60" height="24" viewBox="0 0 100 100" preserveAspectRatio="none" className="inline-block">
-      <polyline
-        points={points}
-        fill="none"
-        stroke={positive ? '#4ade80' : '#f87171'}
-        strokeWidth="3"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+    <span className="text-slate-400">
+      {displayText}
+      <span className="animate-pulse">|</span>
+    </span>
   );
 }
 
-// Tooltip component
-function Tooltip({ children, content }: { children: React.ReactNode; content: string }) {
+// Market Ticker with touch/swipe pause
+function MarketTicker() {
+  const [marketData, setMarketData] = useState([
+    { symbol: "S&P", value: "5,234", change: "+0.8%", positive: true },
+    { symbol: "NDQ", value: "16,432", change: "+1.2%", positive: true },
+    { symbol: "GOLD", value: "$2,654", change: "-0.2%", positive: false },
+    { symbol: "SOL", value: "$178.50", change: "+3.4%", positive: true },
+    { symbol: "DOW", value: "42,156", change: "+0.5%", positive: true },
+    { symbol: "OIL", value: "$78.32", change: "-1.1%", positive: false },
+    { symbol: "10Y", value: "4.25%", change: "+0.02", positive: true },
+  ]);
+
+  const tickerRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  // Touch/mouse handlers for manual scroll
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!tickerRef.current) return;
+    setIsDragging(true);
+    setIsPaused(true);
+    setStartX(e.pageX - tickerRef.current.offsetLeft);
+    setScrollLeft(tickerRef.current.scrollLeft);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !tickerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - tickerRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    tickerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    // Resume after 3 seconds
+    setTimeout(() => setIsPaused(false), 3000);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!tickerRef.current) return;
+    setIsPaused(true);
+    setStartX(e.touches[0].pageX - tickerRef.current.offsetLeft);
+    setScrollLeft(tickerRef.current.scrollLeft);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!tickerRef.current) return;
+    const x = e.touches[0].pageX - tickerRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    tickerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const handleTouchEnd = () => {
+    // Resume after 3 seconds
+    setTimeout(() => setIsPaused(false), 3000);
+  };
+
   return (
-    <div className="group relative inline-block">
-      {children}
-      <div className="invisible group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-white text-black text-xs rounded shadow-lg w-64 z-50">
-        <div className="text-left leading-relaxed">{content}</div>
-        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
-          <div className="border-4 border-transparent border-t-white"></div>
+    <div className="border-b border-slate-800 bg-black overflow-hidden">
+      <div
+        ref={tickerRef}
+        className={`flex gap-6 md:gap-8 py-3 px-4 overflow-x-auto scrollbar-hide cursor-grab active:cursor-grabbing ${
+          !isPaused ? "animate-ticker" : ""
+        }`}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Duplicate items for seamless loop */}
+        {[...marketData, ...marketData].map((item, i) => (
+          <div key={`${item.symbol}-${i}`} className="flex items-center gap-2 shrink-0">
+            <span className="text-slate-500 text-xs tracking-wider">{item.symbol}</span>
+            <span className="text-white font-medium text-sm">{item.value}</span>
+            <span className={`text-xs ${item.positive ? "text-green-400" : "text-red-400"}`}>
+              {item.change}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Collapsed metrics row
+function CollapsedMetrics() {
+  const [fearGreed, setFearGreed] = useState({ value: 25, label: "Extreme Fear" });
+  const [btcDominance, setBtcDominance] = useState(57.6);
+  const [stableDominance, setStableDominance] = useState(8.5);
+
+  return (
+    <div className="border-b border-slate-800 bg-slate-900/30">
+      <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="flex items-center justify-between py-2 md:py-3 gap-4 overflow-x-auto scrollbar-hide">
+          {/* Fear & Greed */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-slate-500 text-xs tracking-wider uppercase hidden sm:inline">Fear & Greed:</span>
+            <span className="text-slate-500 text-xs tracking-wider uppercase sm:hidden">F&G:</span>
+            <span className={`font-bold text-sm ${fearGreed.value <= 25 ? "text-red-400" : fearGreed.value >= 75 ? "text-green-400" : "text-yellow-400"}`}>
+              {fearGreed.value}
+            </span>
+            <span className={`text-xs hidden md:inline ${fearGreed.value <= 25 ? "text-red-400" : fearGreed.value >= 75 ? "text-green-400" : "text-yellow-400"}`}>
+              {fearGreed.label}
+            </span>
+          </div>
+
+          <div className="w-px h-4 bg-slate-700 shrink-0" />
+
+          {/* BTC Dominance */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-slate-500 text-xs tracking-wider uppercase hidden sm:inline">BTC:</span>
+            <span className="text-white font-bold text-sm">{btcDominance}%</span>
+          </div>
+
+          <div className="w-px h-4 bg-slate-700 shrink-0" />
+
+          {/* Stablecoin Dominance */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-slate-500 text-xs tracking-wider uppercase hidden sm:inline">Stables:</span>
+            <span className="text-white font-bold text-sm">{stableDominance}%</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// Generate realistic sparkline data
-function generateSparkline(trend: 'up' | 'down' | 'flat') {
-  const points = 12;
-  const data = [];
-  let value = 50;
-  
-  for (let i = 0; i < points; i++) {
-    const volatility = (Math.random() - 0.5) * 6;
-    
-    if (trend === 'up') {
-      value += 3 + volatility;
-    } else if (trend === 'down') {
-      value -= 3 + volatility;
-    } else {
-      value += volatility;
-    }
-    
-    data.push(Math.max(0, Math.min(100, value)));
-  }
-  
-  return data;
+type AssetCategory = "CRYPTO" | "STABLECOINS" | "STOCKS" | "METALS" | "COMMODITIES";
+
+interface AssetData {
+  symbol: string;
+  name: string;
+  price: number;
+  change24h: number;
+  volume24h: number;
+  marketCap: number;
+  logoUri: string;
+  mint: string;
 }
 
-// Market data tooltips
-const MARKET_TOOLTIPS: Record<string, string> = {
-  'BTC': 'Bitcoin price in USD. The leading cryptocurrency and store of value.',
-  'S&P': 'S&P 500 index tracking 500 largest US companies. Key stock market indicator.',
-  'NDQ': 'NASDAQ-100 index of 100 largest non-financial companies. Tech-heavy benchmark.',
-  'GOLD': 'Gold spot price per troy ounce. Traditional safe-haven and inflation hedge.',
-  'SOL': 'Solana (SOL) price. High-performance blockchain for DeFi and NFTs.',
-  'DOW': 'Dow Jones Industrial Average of 30 major US companies. Historic market indicator.',
-  'OIL': 'WTI Crude Oil price per barrel. Key commodity and economic indicator.',
-  '10Y': '10-Year US Treasury yield. Benchmark interest rate for government debt.',
-};
-
 export default function HomePage() {
-  const [typewriterText, setTypewriterText] = useState('');
-  const [messageIndex, setMessageIndex] = useState(0);
-  const [isTyping, setIsTyping] = useState(true);
-  const [activeCategory, setActiveCategory] = useState('crypto');
-  const [showWaitlist, setShowWaitlist] = useState(false);
-  const [waitlistCategory, setWaitlistCategory] = useState('');
-  const [email, setEmail] = useState('');
-  const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
-  
-  // Live data state
-  const [pythPrices, setPythPrices] = useState<any>(null);
-  const [macroData, setMacroData] = useState<any>(null);
-  const [assets, setAssets] = useState<any[]>([]);
+  const [activeCategory, setActiveCategory] = useState<AssetCategory>("CRYPTO");
+  const [assets, setAssets] = useState<AssetData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const messages = [
-    "Tokenized markets. Real assets. Your custody.",
-    "Trade stocks, crypto, gold - all on-chain.",
-    "24/7 access to global capital markets.",
-    "No brokers. No banks. No market hours.",
-    "Backed by real reserves. Verified on-chain."
+  const categories: { key: AssetCategory; label: string; enabled: boolean }[] = [
+    { key: "CRYPTO", label: "CRYPTO", enabled: true },
+    { key: "STABLECOINS", label: "STABLECOINS", enabled: true },
+    { key: "STOCKS", label: "STOCKS ✦", enabled: false },
+    { key: "METALS", label: "METALS ✦", enabled: false },
+    { key: "COMMODITIES", label: "COMMODITIES ✦", enabled: false },
   ];
 
-  const categories = [
-    { id: 'crypto', label: 'CRYPTO', available: true },
-    { id: 'stablecoins', label: 'STABLECOINS', available: true },
-    { id: 'stocks', label: 'STOCKS', available: false },
-    { id: 'metals', label: 'METALS', available: false },
-    { id: 'commodities', label: 'COMMODITIES', available: false },
-  ];
-
-  // Generate sparklines once on mount
   useEffect(() => {
-    setSparklines({
-      'BTC': generateSparkline('up'),
-      'S&P': generateSparkline('up'),
-      'NDQ': generateSparkline('up'),
-      'GOLD': generateSparkline('down'),
-      'SOL': generateSparkline('up'),
-      'DOW': generateSparkline('up'),
-      'OIL': generateSparkline('up'),
-      '10Y': generateSparkline('flat'),
-    });
-  }, []);
-
-  // Fetch live Pyth prices for ticker
-  useEffect(() => {
-    async function fetchPythPrices() {
+    const fetchAssets = async () => {
+      setLoading(true);
       try {
-        const prices = await getPythMarketData();
-        setPythPrices(prices);
-      } catch (error) {
-        console.error('[Solis] Error fetching Pyth prices:', error);
-      }
-    }
-    
-    fetchPythPrices();
-    const interval = setInterval(fetchPythPrices, 60000);
-    return () => clearInterval(interval);
-  }, []);
+        const categoryAssets = SOLIS_ASSETS.filter((asset) => {
+          if (activeCategory === "CRYPTO") {
+            return !["USDC", "USDT", "PYUSD", "USD1", "PRIME", "CASH", "hyUSD"].includes(asset.symbol);
+          }
+          if (activeCategory === "STABLECOINS") {
+            return ["USDC", "USDT", "PYUSD", "USD1", "PRIME", "CASH", "hyUSD"].includes(asset.symbol);
+          }
+          return false;
+        });
 
-  // Fetch live macro data
-  useEffect(() => {
-    async function fetchMacro() {
-      try {
-        const data = await getAllMarketData();
-        setMacroData(data);
-      } catch (error) {
-        console.error('[Solis] Error fetching macro data:', error);
-      }
-    }
-    
-    fetchMacro();
-    const interval = setInterval(fetchMacro, 120000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch live asset data (prices, volume, liquidity, logos)
-  useEffect(() => {
-    async function fetchAssets() {
-      try {
-        setLoading(true);
-        
-        const assetsWithData = await Promise.all(
-          SOLIS_ASSETS.map(async (asset: any) => {
+        const assetData = await Promise.all(
+          categoryAssets.map(async (asset) => {
             try {
-              const dexData = await getDexData(asset.mint as string);
-              const price = await getVerifiedPrice(asset.mint as string);
-              
-              // Get token supply from Helius for accurate market cap
-              let supply = 0;
-              try {
-                const supplyResponse = await fetch(
-                  'https://mainnet.helius-rpc.com/?api-key=ee6c2238-42f8-4582-b9e5-3180f450b998',
-                  {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      jsonrpc: '2.0',
-                      id: 1,
-                      method: 'getTokenSupply',
-                      params: [asset.mint as string]
-                    })
-                  }
-                );
-                const supplyData = await supplyResponse.json();
-                supply = supplyData.result?.value?.uiAmount || 0;
-              } catch (err) {
-                console.error(`[Solis] Error fetching supply for ${asset.symbol}:`, err);
+              const [marketData, metadata] = await Promise.all([
+                getMarketData(asset.mint),
+                getTokenMetadata(asset.mint),
+              ]);
+
+              let price = parseFloat(marketData?.price || "0");
+              // Sanity check for stablecoins
+              if (["USDC", "USDT", "PYUSD", "USD1", "CASH", "hyUSD"].includes(asset.symbol)) {
+                if (price < 0.8 || price > 1.2) price = 1.0;
               }
-              
-              const metadata = await getTokenMetadata(asset.mint as string);
-              const actualPrice = price || (dexData ? parseFloat(dexData.price || "0") : 0);
-              const marketCap = supply * actualPrice;
-              
+
               return {
                 symbol: asset.symbol,
-                name: asset.name,
+                name: asset.name || asset.symbol,
+                price,
+                change24h: marketData?.priceChange24h || 0,
+                volume24h: marketData?.volume24h || 0,
+                marketCap: marketData?.marketCap || 0,
+                logoUri: metadata?.logoURI || asset.logoURI || "",
                 mint: asset.mint,
-                price: actualPrice,
-                change: dexData?.priceChange24h || 0,
-                volume: dexData?.volume24h || 0,
-                mcap: marketCap,
-                logoURI: metadata?.logoURI || asset.logoURI || '',
-                category: asset.category
               };
-            } catch (err) {
-              console.error(`[Solis] Error fetching data for ${asset.symbol}:`, err);
+            } catch (error) {
               return {
                 symbol: asset.symbol,
-                name: asset.name,
-                mint: asset.mint,
+                name: asset.name || asset.symbol,
                 price: 0,
-                change: 0,
-                volume: 0,
-                mcap: 0,
-                logoURI: '',
-                category: asset.category
+                change24h: 0,
+                volume24h: 0,
+                marketCap: 0,
+                logoUri: asset.logoURI || "",
+                mint: asset.mint,
               };
             }
           })
         );
-        
-        setAssets(assetsWithData);
-        setLoading(false);
+
+        setAssets(assetData);
       } catch (error) {
-        console.error('[Solis] Error fetching assets:', error);
+        console.error("Failed to fetch assets:", error);
+      } finally {
         setLoading(false);
       }
+    };
+
+    if (categories.find((c) => c.key === activeCategory)?.enabled) {
+      fetchAssets();
     }
-    
-    fetchAssets();
-    const interval = setInterval(fetchAssets, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [activeCategory]);
 
-  // Market data for ticker - use live Pyth prices
-  const marketData = pythPrices ? [
-    { symbol: 'BTC', price: `$${Math.round(pythPrices.btc).toLocaleString()}`, change: '+2.3%', positive: true },
-    { symbol: 'S&P', price: Math.round(pythPrices.sp500).toLocaleString(), change: '+0.8%', positive: true },
-    { symbol: 'NDQ', price: Math.round(pythPrices.nasdaq).toLocaleString(), change: '+1.2%', positive: true },
-    { symbol: 'GOLD', price: `$${Math.round(pythPrices.gold).toLocaleString()}`, change: '-0.2%', positive: false },
-    { symbol: 'SOL', price: `$${pythPrices.sol.toFixed(2)}`, change: '+1.8%', positive: true },
-    { symbol: 'DOW', price: Math.round(pythPrices.dow).toLocaleString(), change: '+0.5%', positive: true },
-    { symbol: 'OIL', price: `$${pythPrices.oil.toFixed(2)}`, change: '+0.5%', positive: true },
-    { symbol: '10Y', price: '4.12%', change: '', positive: true },
-  ] : [
-    { symbol: 'BTC', price: '$89,174', change: '+2.3%', positive: true },
-    { symbol: 'S&P', price: '4,825', change: '+0.8%', positive: true },
-    { symbol: 'NDQ', price: '15,234', change: '+1.2%', positive: true },
-    { symbol: 'GOLD', price: '$2,043', change: '-0.2%', positive: false },
-    { symbol: 'SOL', price: '$127', change: '+1.8%', positive: true },
-    { symbol: 'DOW', price: '38,234', change: '+0.5%', positive: true },
-    { symbol: 'OIL', price: '$73.45', change: '+0.5%', positive: true },
-    { symbol: '10Y', price: '4.12%', change: '', positive: true },
-  ];
+  const filteredAssets = assets.filter(
+    (asset) =>
+      asset.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  // Duplicate market data for seamless scrolling
-  const tickerData = [...marketData, ...marketData, ...marketData];
-
-  // Filter live assets by category
-  const filteredAssets = assets.filter(asset => {
-    if (activeCategory === 'crypto') {
-      return asset.category === 'btc' || asset.symbol === 'SOL';
-    } else if (activeCategory === 'stablecoins') {
-      return asset.category === 'stable';
-    }
-    return false;
-  });
-
-  // Typewriter effect
-  useEffect(() => {
-    if (!isTyping) {
-      const timeout = setTimeout(() => {
-        setMessageIndex((prev) => (prev + 1) % messages.length);
-        setTypewriterText('');
-        setIsTyping(true);
-      }, 3000);
-      return () => clearTimeout(timeout);
-    }
-
-    const currentMessage = messages[messageIndex];
-    if (typewriterText.length < currentMessage.length) {
-      const timeout = setTimeout(() => {
-        setTypewriterText(currentMessage.slice(0, typewriterText.length + 1));
-      }, 50);
-      return () => clearTimeout(timeout);
-    } else {
-      setIsTyping(false);
-    }
-  }, [typewriterText, messageIndex, isTyping, messages]);
-
-  function handleCategoryClick(categoryId: string, available: boolean) {
-    if (available) {
-      setActiveCategory(categoryId);
-    } else {
-      setWaitlistCategory(categoryId);
-      setShowWaitlist(true);
-    }
-  }
-
-  function handleWaitlistSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setEmail('');
-    setShowWaitlist(false);
-    alert(`Thank you! We'll notify you when ${waitlistCategory} launches.`);
-  }
-
-  function fmtPrice(price: number): string {
+  const formatPrice = (price: number) => {
     if (price >= 1000) return `$${price.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
     if (price >= 1) return `$${price.toFixed(2)}`;
     return `$${price.toFixed(4)}`;
-  }
+  };
 
-  function fmtVolume(volume: number): string {
-    if (volume >= 1e9) return `$${(volume / 1e9).toFixed(1)}B`;
-    if (volume >= 1e6) return `$${(volume / 1e6).toFixed(1)}M`;
-    return `$${(volume / 1e3).toFixed(1)}K`;
-  }
+  const formatVolume = (vol: number) => {
+    if (vol >= 1e9) return `$${(vol / 1e9).toFixed(2)}B`;
+    if (vol >= 1e6) return `$${(vol / 1e6).toFixed(2)}M`;
+    if (vol >= 1e3) return `$${(vol / 1e3).toFixed(0)}K`;
+    return vol > 0 ? `$${vol.toFixed(0)}` : "--";
+  };
 
-  function fmtMarketCap(mcap: number): string {
-    if (mcap >= 1e9) return `$${(mcap / 1e9).toFixed(1)}B`;
-    if (mcap >= 1e6) return `$${(mcap / 1e6).toFixed(1)}M`;
-    return `$${(mcap / 1e3).toFixed(1)}K`;
-  }
+  const formatMarketCap = (cap: number) => {
+    if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`;
+    if (cap >= 1e6) return `$${(cap / 1e6).toFixed(2)}M`;
+    if (cap >= 1e3) return `$${(cap / 1e3).toFixed(0)}K`;
+    return cap > 0 ? `$${cap.toFixed(0)}` : "--";
+  };
 
   return (
-    <main className="min-h-screen bg-black text-white font-mono">
-      {/* Market Ticker + Indicators Header */}
-      <div className="border-b border-slate-800 bg-black/95 backdrop-blur sticky top-0 z-50">
-        <div className="w-full">
-          
-          {/* Scrolling Market Ticker */}
-          <div className="border-b border-slate-900 overflow-hidden bg-black">
-            <div className="flex animate-scroll">
-              {tickerData.map((item, index) => (
-                  <div key={`${item.symbol}-${index}`} className="flex items-center gap-3 md:gap-4 px-4 md:px-6 py-2.5 md:py-3 whitespace-nowrap border-r border-slate-900">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
-                        {item.symbol}
-                      </span>
-                      <span className="text-xs md:text-sm font-bold text-white mb-0.5">
-                        {item.price}
-                      </span>
-                      {item.change && (
-                        <span className={`text-[10px] md:text-xs font-medium ${item.positive ? 'text-green-400' : 'text-red-400'}`}>
-                          {item.change}
-                        </span>
-                      )}
-                    </div>
-                    {sparklines[item.symbol] && (
-                      <div className="hidden sm:block">
-                        <Sparkline data={sparklines[item.symbol]} positive={item.positive} />
-                      </div>
-                    )}
-                  </div>
-              ))}
-            </div>
-          </div>
+    <main className="min-h-screen bg-black text-white">
+      <Header />
+      <MarketTicker />
+      <CollapsedMetrics />
 
-          {/* Simple Metric Cards */}
-          <div className="max-w-7xl mx-auto px-4 py-3 lg:px-6 lg:py-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
-              
-              {/* Fear & Greed */}
-              <div className="bg-slate-950/50 border border-slate-900 rounded px-3 py-3 lg:px-5 lg:py-4">
-                  <div className="text-[9px] text-slate-600 uppercase tracking-[0.15em] mb-2">
-                    Fear & Greed Index
-                  </div>
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xl lg:text-3xl font-bold text-white">
-                      {macroData ? macroData.fearGreed : '72'}
-                    </span>
-                    {macroData && (
-                      <span className={`text-xs lg:text-sm font-medium ${
-                        macroData.fearGreed > 55 ? 'text-green-400' : 
-                        macroData.fearGreed < 45 ? 'text-red-400' : 
-                        'text-slate-400'
-                      }`}>
-                        {macroData.fearGreed > 75 ? 'Extreme Greed' :
-                         macroData.fearGreed > 55 ? 'Greed' :
-                         macroData.fearGreed > 45 ? 'Neutral' :
-                         macroData.fearGreed > 25 ? 'Fear' : 'Extreme Fear'}
-                      </span>
-                    )}
-                    {!macroData && <span className="text-xs lg:text-sm text-green-400 font-medium">Greed</span>}
-                  </div>
-                </div>
-
-              {/* BTC Dominance */}
-              <div className="bg-slate-950/50 border border-slate-900 rounded px-3 py-3 lg:px-5 lg:py-4">
-                  <div className="text-[9px] text-slate-600 uppercase tracking-[0.15em] mb-2">
-                    Bitcoin Dominance
-                  </div>
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xl lg:text-3xl font-bold text-white">
-                      {macroData ? `${macroData.btcDom.toFixed(1)}%` : '54.2%'}
-                    </span>
-                  </div>
-                </div>
-
-              {/* Stablecoin Dominance */}
-              <div className="bg-slate-950/50 border border-slate-900 rounded px-3 py-3 lg:px-5 lg:py-4">
-                  <div className="text-[9px] text-slate-600 uppercase tracking-[0.15em] mb-2">
-                    Stablecoin Dominance
-                  </div>
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xl lg:text-3xl font-bold text-white">
-                      {macroData ? `${macroData.stableDom.toFixed(1)}%` : '8.1%'}
-                    </span>
-                  </div>
-                </div>
-
-              {/* Live Indicator - hidden on mobile */}
-              <div className="hidden lg:flex items-center justify-end">
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                  <span className="text-[9px] text-slate-600 uppercase tracking-[0.2em]">LIVE PRICES</span>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Add CSS for scrolling animation */}
-      <style jsx>{`
-        @keyframes scroll {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-33.333%);
-          }
-        }
-        .animate-scroll {
-          animation: scroll 30s linear infinite;
-        }
-        .animate-scroll:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
-
-      {/* Hero */}
-      <div className="max-w-6xl mx-auto px-4 py-10 md:px-6 lg:py-20">
-        <div className="text-center mb-6">
-          <h1 className="text-3xl md:text-5xl font-bold mb-3 tracking-tight">Solis</h1>
+      {/* Hero Section */}
+      <div className="max-w-4xl mx-auto px-4 py-10 md:py-16 text-center">
+        <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">Solis</h1>
+        <p className="text-slate-500 text-sm tracking-[0.3em] uppercase mb-4">24/7 CAPITAL MARKETS</p>
+        
+        {/* Typewriter with API acknowledgments */}
+        <div className="h-8 mb-6">
+          <TypeWriter messages={TYPEWRITER_MESSAGES} />
         </div>
 
-        <div className="text-center mb-3">
-          <h2 className="text-xs md:text-sm text-slate-500 uppercase tracking-[0.3em] font-bold">
-            24/7 Capital Markets
-          </h2>
-        </div>
+        {/* Read More / Docs Link */}
+        <Link
+          href="/docs"
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-white text-sm tracking-wider transition-colors mb-8"
+        >
+          Learn how it works
+          <span>→</span>
+        </Link>
 
-        <div className="text-center mb-10 md:mb-16 h-7">
-          <p className="text-sm md:text-base text-slate-400 tracking-wide">
-            {typewriterText}
-            <span className="inline-block w-[2px] h-5 bg-white ml-1 animate-pulse align-middle" />
-          </p>
-        </div>
-
-        {/* Search */}
-        <div className="max-w-2xl mx-auto mb-8 md:mb-12">
+        {/* Search Bar */}
+        <div className="max-w-xl mx-auto mb-8">
           <input
             type="text"
             placeholder="Search crypto, stocks, commodities..."
-            className="w-full bg-black border border-slate-800 rounded px-4 md:px-5 py-3 md:py-3.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-slate-700 transition-colors"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-slate-700 text-sm"
           />
         </div>
 
-        {/* Category Tabs - horizontally scrollable on mobile */}
-        <div className="flex gap-2 md:gap-3 mb-8 md:mb-10 overflow-x-auto pb-2 scrollbar-hide md:justify-center">
+        {/* Category Tabs - Horizontal Scroll */}
+        <div className="flex gap-2 mb-8 overflow-x-auto scrollbar-hide pb-2 justify-start md:justify-center">
           {categories.map((cat) => (
             <button
-              key={cat.id}
-              onClick={() => handleCategoryClick(cat.id, cat.available)}
-              className={`shrink-0 px-4 md:px-5 py-2 md:py-2.5 text-[10px] md:text-xs font-bold tracking-[0.15em] md:tracking-[0.2em] uppercase transition-all ${
-                activeCategory === cat.id && cat.available
-                  ? 'bg-white text-black'
-                  : cat.available
-                  ? 'bg-transparent text-white border border-slate-800 hover:border-slate-700'
-                  : 'bg-transparent text-slate-600 border border-slate-800 hover:text-slate-500 cursor-pointer'
+              key={cat.key}
+              onClick={() => cat.enabled && setActiveCategory(cat.key)}
+              disabled={!cat.enabled}
+              className={`px-4 py-2 text-sm tracking-wider rounded-lg shrink-0 whitespace-nowrap transition-colors ${
+                activeCategory === cat.key
+                  ? "bg-white text-black font-bold"
+                  : cat.enabled
+                  ? "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                  : "bg-slate-900/50 text-slate-600 border border-slate-800/50 cursor-not-allowed"
               }`}
             >
               {cat.label}
-              {!cat.available && <span className="hidden sm:inline"> (SOON)</span>}
-              {!cat.available && <span className="sm:hidden">*</span>}
             </button>
           ))}
         </div>
+      </div>
 
-        {/* Asset Table */}
-        <div className="border border-slate-800 rounded overflow-hidden">
+      {/* Asset Table */}
+      <div className="max-w-5xl mx-auto px-4 pb-16">
+        <div className="border border-slate-800 rounded-lg overflow-hidden">
           {/* Table Header */}
-          <div className="grid grid-cols-[2fr_1fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 px-4 md:px-5 py-3 bg-slate-950 border-b border-slate-800">
-            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Asset</div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Price</div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">24H</div>
-            <div className="hidden md:block text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Volume</div>
-            <div className="hidden md:block text-[10px] text-slate-500 uppercase tracking-widest font-bold text-right">Market Cap</div>
+          <div className="grid grid-cols-[2fr_1fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 px-4 md:px-5 py-3 bg-slate-900/50 border-b border-slate-800 text-xs text-slate-500 tracking-widest uppercase">
+            <div>ASSET</div>
+            <div className="text-right">PRICE</div>
+            <div className="text-right">24H</div>
+            <div className="text-right hidden md:block">VOLUME</div>
+            <div className="text-right hidden md:block">MARKET CAP</div>
             <div></div>
           </div>
 
+          {/* Table Body */}
           {loading ? (
-            <div className="px-6 py-12 text-center text-slate-500">
-              Loading live data...
-            </div>
-          ) : filteredAssets.length > 0 ? (
+            <div className="py-12 text-center text-slate-500">Loading assets...</div>
+          ) : filteredAssets.length === 0 ? (
+            <div className="py-12 text-center text-slate-500">No assets found</div>
+          ) : (
             filteredAssets.map((asset) => (
-              <div
+              <Link
                 key={asset.symbol}
-                onClick={() => window.location.href = `/asset/${asset.symbol.toLowerCase()}`}
-                className="grid grid-cols-[2fr_1fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-900 hover:bg-slate-950 transition-colors items-center group cursor-pointer"
+                href={`/asset/${asset.symbol.toLowerCase()}`}
+                className="grid grid-cols-[2fr_1fr_1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 px-4 md:px-5 py-4 items-center border-b border-slate-800/50 hover:bg-slate-900/30 transition-colors"
               >
-                {/* Asset name + icon */}
-                <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                  {asset.logoURI ? (
-                    <Image 
-                      src={asset.logoURI} 
-                      alt={asset.symbol} 
-                      width={36} 
-                      height={36} 
-                      className="rounded-full w-7 h-7 md:w-9 md:h-9 shrink-0"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
+                {/* Asset */}
+                <div className="flex items-center gap-3">
+                  {asset.logoUri ? (
+                    <img
+                      src={asset.logoUri}
+                      alt={asset.symbol}
+                      className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800"
                     />
-                  ) : null}
-                  {!asset.logoURI && (
-                    <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-slate-900 flex items-center justify-center text-[10px] md:text-xs font-bold group-hover:bg-slate-800 transition-colors shrink-0">
-                      {asset.symbol[0]}
+                  ) : (
+                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold">
+                      {asset.symbol.slice(0, 2)}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-bold text-xs md:text-sm text-white">{asset.symbol}</div>
-                    <div className="text-[10px] md:text-xs text-slate-600 truncate">{asset.name}</div>
+                    <div className="text-white font-medium text-sm md:text-base truncate">{asset.symbol}</div>
+                    <div className="text-slate-500 text-xs truncate">{asset.name}</div>
                   </div>
                 </div>
 
                 {/* Price */}
-                <div className="text-right text-xs md:text-sm text-white font-medium">
-                  {asset.price > 0 ? fmtPrice(asset.price) : '--'}
+                <div className="text-right text-white text-sm md:text-base">
+                  {formatPrice(asset.price)}
                 </div>
 
                 {/* 24H Change */}
-                <div className={`text-right text-xs md:text-sm font-medium ${
-                  asset.change >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  {asset.change !== 0 ? `${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(1)}%` : '--'}
-                </div>
-
-                {/* Volume - hidden on mobile */}
-                <div className="hidden md:block text-right text-sm text-slate-500">
-                  {asset.volume > 0 ? fmtVolume(asset.volume) : '--'}
-                </div>
-
-                {/* Market Cap - hidden on mobile */}
-                <div className="hidden md:block text-right text-sm text-slate-500">
-                  {asset.mcap > 0 ? fmtMarketCap(asset.mcap) : '--'}
-                </div>
-
-                {/* Swap button */}
-                <Link 
-                  href={`/swap?from=${asset.symbol}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="px-3 md:px-4 py-1.5 bg-white text-black text-[9px] md:text-[10px] font-bold tracking-[0.15em] uppercase hover:bg-slate-200 transition-colors"
+                <div
+                  className={`text-right text-sm ${
+                    asset.change24h >= 0 ? "text-green-400" : "text-red-400"
+                  }`}
                 >
-                  SWAP
-                </Link>
-              </div>
+                  {asset.change24h >= 0 ? "+" : ""}
+                  {asset.change24h.toFixed(2)}%
+                </div>
+
+                {/* Volume - Hidden on mobile */}
+                <div className="text-right text-slate-400 text-sm hidden md:block">
+                  {formatVolume(asset.volume24h)}
+                </div>
+
+                {/* Market Cap - Hidden on mobile */}
+                <div className="text-right text-slate-400 text-sm hidden md:block">
+                  {formatMarketCap(asset.marketCap)}
+                </div>
+
+                {/* Swap Button */}
+                <div className="text-right">
+                  <span className="px-3 py-1.5 md:px-4 md:py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold tracking-wider rounded transition-colors">
+                    SWAP
+                  </span>
+                </div>
+              </Link>
             ))
-          ) : (
-            <div className="px-6 py-12 text-center text-slate-500">
-              No assets found
-            </div>
           )}
         </div>
+
+        {/* Disabled Categories Message */}
+        {!categories.find((c) => c.key === activeCategory)?.enabled && (
+          <div className="py-16 text-center">
+            <div className="text-slate-500 mb-4">
+              Tokenized {activeCategory.toLowerCase()} coming Q2 2026
+            </div>
+            <a
+              href={WAITLIST_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold tracking-wider rounded transition-colors"
+            >
+              JOIN WAITLIST
+            </a>
+          </div>
+        )}
       </div>
 
-      {/* Waitlist Modal */}
-      {showWaitlist && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur flex items-center justify-center z-50 p-4">
-          <div className="bg-black border border-slate-800 rounded p-6 md:p-8 max-w-md w-full">
-            <h3 className="text-lg md:text-xl font-bold mb-3 uppercase tracking-wider">
-              {waitlistCategory} Coming Soon
-            </h3>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Join the waitlist to be notified when {waitlistCategory} markets launch on Solis.
-            </p>
-            <form onSubmit={handleWaitlistSubmit}>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                required
-                className="w-full bg-black border border-slate-800 rounded px-4 py-3 text-sm text-white placeholder-slate-600 mb-4 focus:outline-none focus:border-slate-700"
-              />
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-white text-black text-xs font-bold py-3 uppercase tracking-widest hover:bg-slate-200 transition-colors"
-                >
-                  Join
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowWaitlist(false)}
-                  className="flex-1 bg-transparent border border-slate-800 text-white text-xs font-bold py-3 uppercase tracking-widest hover:border-slate-700 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+      {/* Footer */}
+      <footer className="border-t border-slate-800 py-8 px-4">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="text-slate-600 text-sm">
+            © 2026 Solis. Built on Solana.
+          </div>
+          <div className="flex items-center gap-6">
+            <Link href="/docs" className="text-slate-500 hover:text-white text-sm transition-colors">
+              Docs
+            </Link>
+            <a
+              href="https://github.com/deFiFello/solis-icm-directory"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-500 hover:text-white text-sm transition-colors"
+            >
+              GitHub
+            </a>
+            <a
+              href={WAITLIST_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-500 hover:text-white text-sm transition-colors"
+            >
+              Waitlist
+            </a>
           </div>
         </div>
-      )}
+      </footer>
     </main>
   );
 }
