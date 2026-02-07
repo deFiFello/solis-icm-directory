@@ -228,7 +228,7 @@ export default function HomePage() {
     const fetchAssets = async () => {
       setLoading(true);
       try {
-        const categoryAssets = SOLIS_ASSETS.filter((asset) => {
+        const categoryAssets = (SOLIS_ASSETS as any[]).filter((asset) => {
           if (activeCategory === "CRYPTO") {
             return !["USDC", "USDT", "PYUSD", "USD1", "PRIME", "CASH", "hyUSD"].includes(asset.symbol);
           }
