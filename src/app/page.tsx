@@ -258,7 +258,7 @@ export default function HomePage() {
                 price,
                 change24h: marketData?.priceChange24h || 0,
                 volume24h: marketData?.volume24h || 0,
-                marketCap: marketData?.marketCap || 0,
+                marketCap: marketData?.fdv || 0,
                 logoUri: metadata?.logoURI || asset.logoURI || "",
                 mint: asset.mint,
               };
