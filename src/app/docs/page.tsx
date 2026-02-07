@@ -333,7 +333,11 @@ export default function DocsPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <h3 className="text-xl font-bold">{y.title}</h3>
-                    <span className={`text-xs px-2 py-1 bg-${y.riskColor}-500/20 text-${y.riskColor}-400 border border-${y.riskColor}-500/30`}>{y.risk}</span>
+                    <span className={`text-xs px-2 py-1 ${
+                      y.riskColor === 'green' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      y.riskColor === 'blue' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                      'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                    }`}>{y.risk}</span>
                   </div>
                   <span className="text-[#666] text-sm">{y.apy}</span>
                 </div>
@@ -371,7 +375,7 @@ export default function DocsPage() {
               {[
                 { action: "Standard Swap", fee: "0.5%", notes: "Applied to output amount" },
                 { action: "Shield Swap", fee: "0.75%", notes: "Includes ZK proof generation" },
-                { action: "Shield Withdraw", fee: "0%", notes: "Only network gas fees" },
+                { action: "Shield Withdraw", fee: "0.35% + rent", notes: "PrivacyCash protocol fee" },
                 { action: "Yield Discovery", fee: "0%", notes: "Affiliate referrals only" },
               ].map((item, i) => (
                 <div key={i} className="grid grid-cols-3 gap-4 px-6 py-4 border-b border-[#222] last:border-b-0">
@@ -514,7 +518,7 @@ export default function DocsPage() {
           {/* Footer */}
           <div className="text-center py-12 border-t border-[#222]">
             <p className="text-[#666] mb-4">Ready to explore the Internet Capital Markets?</p>
-            <Link href="/" className="inline-block px-8 py-3 bg-white text-black font-bold tracking-wider uppercase hover:bg-slate-200 transition-colors">
+            <Link href="/" className="inline-block px-8 py-3 bg-white text-black font-bold tracking-wider uppercase hover:bg-[#e0e0e0] transition-colors">
               Launch App →
             </Link>
           </div>
